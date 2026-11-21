@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Clip and reproject a synthetic digital elevation model on a reproducible 100 metre grid.">
+  <title>TerrainPrep</title>
+  <link rel="icon" href="/terrain.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand"><img src="/terrain.svg" width="38" height="38" alt=""> <span>TerrainPrep</span></div>
+      <div class="environment"><span></span> LOCAL SESSION</div>
+    </header>
+
+    <main>
+      <section class="intro" aria-labelledby="title">
+        <div>
+          <h1 id="title">Synthetic terrain explorer</h1>
+          <p>Draw a geographic extent, warp the DEM to UTM, and inspect the cells you export.</p>
+        </div>
+        <div class="stack" aria-label="Processing technologies">GDAL <span></span> PROJ <span></span> WGS 84</div>
+      </section>
+
+      <div class="workspace">
+        <div class="primary">
+          <section class="panel map-panel" aria-labelledby="map-heading">
+            <header class="panel-head map-head">
+              <div>
+                <h2 id="map-heading">Terrain view</h2>
+                <p id="view-meta">WGS 84 · EPSG:4326 · 0.001° grid</p>
+              </div>
+              <div class="controls">
+                <div class="segmented" role="group" aria-label="Raster to display">
+                  <button type="button" id="source-view" aria-pressed="true">Source DEM</button>
+                  <button type="button" id="output-view" aria-pressed="false" disabled>Processed DEM</button>
+                </div>
+                <label class="shade"><input type="checkbox" id="shade" checked> Hillshade</label>
+              </div>
+            </header>
+            <div id="map-wrap" class="map-wrap">
+              <canvas id="map" role="img" aria-label="Synthetic elevation map. Use the coordinate fields for keyboard area selection."></canvas>
+              <div class="map-badge">SYNTHETIC DEM</div>
+              <div class="compass" aria-hidden="true"><span id="north-label">N</span><div>▲</div></div>
+            </div>
+            <div class="map-foot">
+              <div class="legend-block">
+                <div class="legend-title">Elevation <span>m</span></div>
+                <div class="scale" aria-label="Elevation color scale from −600 to 3200 metres">
+                  <div class="ramp"></div>
+                  <div class="ticks"><span>−600</span><span>0</span><span>1,000</span><span>2,000</span><span>3,200</span></div>
+                </div>
+              </div>
+              <div class="legend-keys"><span><i class="key-aoi"></i> AOI boundary</span><span><i class="key-nodata"></i> NoData</span></div>
+            </div>
+          </section>
+
+          <section class="panel profile-panel" aria-labelledby="profile-heading">
+            <header class="panel-head">
+              <div><h2 id="profile-heading">Elevation profile</h2><p id="profile-meta">Middle row · Source DEM</p></div>
+              <span class="profile-unit" id="profile-unit">Eastward distance · km at row latitude</span>
+            </header>
+            <canvas id="profile" role="img" aria-label="Elevation across the middle row of the displayed raster. Gaps indicate NoData."></canvas>
+          </section>
+        </div>
+
+        <aside class="sidebar" aria-label="AOI, output metrics, and downloads">
+          <section class="panel inspector" aria-labelledby="aoi-heading">
+            <header class="panel-head">
+              <div><h2 id="aoi-heading">Area of interest</h2><p>Drag on the source DEM or edit the bounds.</p></div>
+              <button type="button" id="reset" class="text-button">Reset</button>
+            </header>
+            <form id="aoi-form" novalidate>
+              <div class="coordinate-grid">
+                <label for="west">West longitude <span>°</span><input id="west" name="west" type="number" step="any" required></label>
+                <label for="east">East longitude <span>°</span><input id="east" name="east" type="number" step="any" required></label>
+                <label for="south">South latitude <span>°</span><input id="south" name="south" type="number" step="any" required></label>
+                <label for="north">North latitude <span>°</span><input id="north" name="north" type="number" step="any" required></label>
+              </div>
+              <div class="area-line"><span>Ellipsoidal area</span><strong id="area">—</strong></div>
+              <p id="aoi-error" class="error" role="alert" hidden></p>
+              <button id="process" class="run" type="submit" disabled>Process terrain <span aria-hidden="true">↗</span></button>
+            </form>
+          </section>
+
+          <section class="panel inspector" aria-labelledby="output-heading">
+            <header class="panel-head"><div><h2 id="output-heading">Output inspection</h2><p id="output-caption">Process the AOI to inspect raster cells.</p></div><span id="output-status" class="output-status" role="status">READY</span></header>
+            <div class="elevation-stats">
+              <div><span>MIN ELEVATION</span><strong id="minimum">—</strong></div>
+              <div><span>MAX ELEVATION</span><strong id="maximum">—</strong></div>
+            </div>
+            <dl class="metadata">
+              <div><dt>CRS</dt><dd>EPSG:32613 <span>· UTM 13N</span></dd></div>
+              <div><dt>Resolution</dt><dd>100 × 100 m</dd></div>
+              <div><dt>Grid dimensions</dt><dd id="dimensions">—</dd></div>
+              <div><dt>Valid cells</dt><dd id="valid-cells">—</dd></div>
+              <div><dt>NoData cells</dt><dd id="nodata-cells">—</dd></div>
+              <div><dt>Easting extent</dt><dd id="easting">—</dd></div>
+              <div><dt>Northing extent</dt><dd id="northing">—</dd></div>
+            </dl>
+          </section>
+
+          <section class="panel inspector export-panel" aria-labelledby="export-heading">
+            <header class="panel-head"><div><h2 id="export-heading">Export</h2><p>GeoTIFF and a JSON manifest with SHA-256 hashes.</p></div></header>
+            <div class="exports">
+              <button type="button" id="download-tiff" disabled><span aria-hidden="true">↓</span> GeoTIFF</button>
+              <button type="button" id="download-json" disabled><span aria-hidden="true">↓</span> Provenance</button>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <footer><span>Synthetic model · No surveyed terrain · Vertical datum unspecified</span><span>WGS 84 → UTM zone 13N</span></footer>
+  </div>
+</body>
+</html>
